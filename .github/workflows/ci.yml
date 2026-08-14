@@ -24,10 +24,8 @@ jobs:
           bundler-cache: true
           working-directory: server
 
-      - name: Set up Swift
-        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3
-        with:
-          swift-version: '6.0'
+      - name: Verify the hosted Swift toolchain
+        run: swift --version
 
       - name: Verify pinned source revisions
         run: |
