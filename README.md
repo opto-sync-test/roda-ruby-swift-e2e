@@ -11,6 +11,12 @@ This repository proves an official Swift client can cross a Ruby/Roda HTTP bound
 - nested objects and array elements matched by `id` retain independent server and client fields;
 - both Ruby and Swift assertions verify the native engine version.
 
+Swift also exposes a bounded `BackgroundSyncWorker` that drains iOS and macOS
+lanes concurrently and replays the immutable batch if any response is lost.
+An Apple-only adapter wires that operation into `BGTaskScheduler`, while the
+worker core remains Foundation-only and is tested on the hosted Linux Swift
+toolchain.
+
 `vendor/opto-sync-clients` and its nested `syncer.c` repository are Git submodules. Their exact revisions are recorded in `opto-sync-pin.json`.
 
 ## Run locally

@@ -40,4 +40,44 @@ final class MergeGatewayTests: XCTestCase {
         XCTAssertEqual(items.first?["server"] as? Bool, true)
         XCTAssertEqual(items.first?["client"] as? Bool, true)
     }
+
+    func testBackgroundWorkerMultiplexesMobileAndDesktopLanes() async throws {
+        let endpoint = ProcessInfo.processInfo.environment["OPTO_SYNC_ENDPOINT"]
+            ?? "http://127.0.0.1:9292"
+        let gateway = MergeGateway(
+            client: OptoSyncClient.Client(
+                baseURL: try XCTUnwrap(URL(string: endpoint)),
+                bearerToken: "e2e-token"
+            )
+        )
+        let worker = BackgroundSyncWorker(gateway: gateway)
+        let responses = try await worker.drain([
+            try SyncLane(
+                name: "ios-bg-task",
+                base: ["id": "doc-1", "profile": ["server": "kept"]],
+                incoming: ["profile": ["mobile": "background"]]
+            ),
+            try SyncLane(
+                name: "macos-desktop-task",
+                base: ["id": "doc-2", "profile": ["server": "kept"]],
+                incoming: ["profile": ["desktop": "background"]]
+            ),
+        ])
+
+        XCTAssertEqual(responses.map(\.name), ["ios-bg-task", "macos-desktop-task"])
+        let bodies = try Dictionary(uniqueKeysWithValues: responses.map { response in
+            (
+                response.name,
+                try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+                )
+            )
+        })
+        let mobile = try XCTUnwrap(bodies["ios-bg-task"]?["merged"] as? [String: Any])
+        let mobileProfile = try XCTUnwrap(mobile["profile"] as? [String: Any])
+        XCTAssertEqual(mobileProfile["mobile"] as? String, "background")
+        let desktop = try XCTUnwrap(bodies["macos-desktop-task"]?["merged"] as? [String: Any])
+        let desktopProfile = try XCTUnwrap(desktop["profile"] as? [String: Any])
+        XCTAssertEqual(desktopProfile["desktop"] as? String, "background")
+    }
 }
