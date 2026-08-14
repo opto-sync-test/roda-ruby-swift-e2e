@@ -1,0 +1,58 @@
+name: Roda Ruby Swift E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out recursively
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: server
+
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2
+        with:
+          swift-version: '6.0'
+
+      - name: Verify pinned source revisions
+        run: |
+          python3 -m json.tool opto-sync-pin.json >/dev/null
+          test "$(git -C vendor/opto-sync-clients rev-parse HEAD)" = "$(python3 -c 'import json; print(json.load(open("opto-sync-pin.json"))["clientsCommit"])')"
+          test "$(git -C vendor/opto-sync-clients/syncer.c rev-parse HEAD)" = "$(python3 -c 'import json; print(json.load(open("opto-sync-pin.json"))["coreCommit"])')"
+
+      - name: Compile the C core and test Roda
+        working-directory: server
+        run: |
+          bundle exec ruby build_core.rb
+          bundle exec ruby -I. test/app_test.rb
+
+      - name: Test the official Swift client across HTTP
+        run: |
+          cd server
+          bundle exec rackup --server webrick --host 127.0.0.1 --port 9292 > /tmp/roda-ruby-swift-e2e.log 2>&1 &
+          roda_e2e_pid=$!
+          cd ..
+          trap 'kill "$roda_e2e_pid"' EXIT
+          for attempt in {1..50}; do
+            if curl --fail --silent http://127.0.0.1:9292/health >/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          curl --fail --silent http://127.0.0.1:9292/health
+          swift test
